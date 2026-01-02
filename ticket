@@ -815,72 +815,42 @@ cmd_migrate_beads() {
 
     ensure_dir
 
-    local count=0
-    while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
+    # Single jq call generates all markdown with <<<FILE:id>>> delimiters
+    # Then awk splits into individual files (much faster than per-line jq calls)
+    jq -r '
+        def deps_array:
+            [.dependencies[]?.depends_on_id // empty]
+            | if length == 0 then "[]"
+              else "[" + (map("\(.)") | join(", ")) + "]" end;
 
-        local id title desc status created design acceptance priority issue_type deps_json assignee external_ref notes
-        id=$(echo "$line" | jq -r '.id')
-        title=$(echo "$line" | jq -r '.title // "Untitled"')
-        desc=$(echo "$line" | jq -r '.description // ""')
-        status=$(echo "$line" | jq -r '.status // "open"')
-        created=$(echo "$line" | jq -r '.created_at // ""')
-        design=$(echo "$line" | jq -r '.design // ""')
-        acceptance=$(echo "$line" | jq -r '.acceptance_criteria // ""')
-        priority=$(echo "$line" | jq -r '.priority // 2')
-        issue_type=$(echo "$line" | jq -r '.issue_type // "task"')
-        assignee=$(echo "$line" | jq -r '.assignee // ""')
-        external_ref=$(echo "$line" | jq -r '.external_ref // ""')
-        notes=$(echo "$line" | jq -r '.notes // ""')
-
-        # Extract dependency IDs
-        deps_json=$(echo "$line" | jq -r '[.dependencies[]?.depends_on_id // empty] | if length == 0 then "[]" else "[" + (map("\(.)") | join(", ")) + "]" end')
-
-        local file="$TICKETS_DIR/${id}.md"
-
-        # Build content
-        {
-            echo "---"
-            echo "id: $id"
-            echo "status: $status"
-            echo "deps: $deps_json"
-            echo "created: $created"
-            echo "type: $issue_type"
-            echo "priority: $priority"
-            [[ -n "$assignee" ]] && echo "assignee: $assignee"
-            [[ -n "$external_ref" ]] && echo "external-ref: $external_ref"
-            echo "---"
-            echo "# $title"
-            echo ""
-            if [[ -n "$desc" ]]; then
-                echo "$desc"
-                echo ""
-            fi
-            if [[ -n "$design" ]]; then
-                echo "## Design"
-                echo ""
-                echo "$design"
-                echo ""
-            fi
-            if [[ -n "$acceptance" ]]; then
-                echo "## Acceptance Criteria"
-                echo ""
-                echo "$acceptance"
-                echo ""
-            fi
-            if [[ -n "$notes" ]]; then
-                echo "## Notes"
-                echo ""
-                echo "$notes"
-                echo ""
-            fi
-        } > "$file"
-
-        echo "Migrated: $id"
-        count=$((count + 1))
-    done < "$jsonl"
-
-    echo "Migrated $count tickets from beads"
+        "<<<FILE:\(.id)>>>\n" +
+        "---\n" +
+        "id: \(.id)\n" +
+        "status: \(.status // "open")\n" +
+        "deps: \(deps_array)\n" +
+        "created: \(.created_at // "")\n" +
+        "type: \(.issue_type // "task")\n" +
+        "priority: \(.priority // 2)\n" +
+        (if .assignee and .assignee != "" then "assignee: \(.assignee)\n" else "" end) +
+        (if .external_ref and .external_ref != "" then "external-ref: \(.external_ref)\n" else "" end) +
+        "---\n" +
+        "# \(.title // "Untitled")\n\n" +
+        (if .description and .description != "" then "\(.description)\n\n" else "" end) +
+        (if .design and .design != "" then "## Design\n\n\(.design)\n\n" else "" end) +
+        (if .acceptance_criteria and .acceptance_criteria != "" then "## Acceptance Criteria\n\n\(.acceptance_criteria)\n\n" else "" end) +
+        (if .notes and .notes != "" then "## Notes\n\n\(.notes)\n\n" else "" end)
+    ' "$jsonl" | awk -v dir="$TICKETS_DIR" '
+        /^<<<FILE:.*>>>$/ {
+            if (file) close(file)
+            id = substr($0, 9, length($0) - 11)
+            file = dir "/" id ".md"
+            count++
+            print "Migrated: " id
+            next
+        }
+        file { print > file }
+        END { if (file) close(file); print "Migrated " count " tickets from beads" }
+    '
 }
 
 cmd_help() {
