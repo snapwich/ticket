@@ -1108,22 +1108,27 @@ cmd_migrate_beads() {
 
     # Single jq call generates all markdown with <<<FILE:id>>> delimiters
     # Then awk splits into individual files (much faster than per-line jq calls)
+    # Beads dependency types map to: blocks->deps, parent-child->parent, related->links
     jq -r '
-        def deps_array:
-            [.dependencies[]?.depends_on_id // empty]
-            | if length == 0 then "[]"
-              else "[" + (map("\(.)") | join(", ")) + "]" end;
+        def by_type(t): [.dependencies[]? | select(.type == t) | .depends_on_id];
+        def to_array: if length == 0 then "[]" else "[" + (map("\(.)") | join(", ")) + "]" end;
+
+        (by_type("blocks") | to_array) as $deps |
+        (by_type("related") | to_array) as $links |
+        (by_type("parent-child") | first // null) as $parent |
 
         "<<<FILE:\(.id)>>>\n" +
         "---\n" +
         "id: \(.id)\n" +
         "status: \(.status // "open")\n" +
-        "deps: \(deps_array)\n" +
+        "deps: \($deps)\n" +
+        "links: \($links)\n" +
         "created: \(.created_at // "")\n" +
         "type: \(.issue_type // "task")\n" +
         "priority: \(.priority // 2)\n" +
         (if .assignee and .assignee != "" then "assignee: \(.assignee)\n" else "" end) +
         (if .external_ref and .external_ref != "" then "external-ref: \(.external_ref)\n" else "" end) +
+        (if $parent then "parent: \($parent)\n" else "" end) +
         "---\n" +
         "# \(.title // "Untitled")\n\n" +
         (if .description and .description != "" then "\(.description)\n\n" else "" end) +
