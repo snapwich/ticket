@@ -91,6 +91,16 @@ Tickets stored as markdown files in .tickets/
 Supports partial ID matching (e.g., 'tk show 5c4' matches 'nw-5c46')
 ```
 
+## Testing
+
+The tests are written in the Behavior-Driven Development library [behave](https://behave.readthedocs.io/en/latest/) and require Python.
+
+If you have `uv` [installed](https://docs.astral.sh/uv/getting-started/installation/) simply:
+
+```sh
+make test
+```
+
 ## Migrating from Beads
 
 ```bash
