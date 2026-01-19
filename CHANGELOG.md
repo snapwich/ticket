@@ -10,6 +10,9 @@
 - `--tags` flag for `create` command to add comma-separated tags
 - `-T, --tag` filter flag for `ls`, `ready`, `blocked`, and `closed` commands
 
+### Fixed
+- `generate_id` now uses 3-char prefix for single-segment directory names (e.g., "plan" → "pla" instead of "p")
+
 ## [0.2.0] - 2026-01-04
 
 ### Added

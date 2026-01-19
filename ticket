@@ -42,8 +42,8 @@ generate_id() {
     local prefix
     prefix=$(echo "$dir_name" | sed 's/[-_]/ /g' | awk '{for(i=1;i<=NF;i++) printf substr($i,1,1)}')
 
-    # Fallback to first 3 chars if no segments
-    [[ -z "$prefix" ]] && prefix="${dir_name:0:3}"
+    # Fallback to first 3 chars if single segment (prefix too short)
+    [[ ${#prefix} -lt 2 ]] && prefix="${dir_name:0:3}"
 
     # 4-char hash from timestamp + PID for entropy
     local hash
