@@ -5,6 +5,13 @@
 ### Added
 - `list` command alias for `ls`
 
+### Fixed
+- `dep` command now resolves partial IDs for the dependency argument
+- `undep` command now resolves partial IDs and validates dependency exists
+- `unlink` command now resolves partial IDs for both arguments
+- `create --parent` now validates and resolves parent ticket ID
+- `generate_id` now uses 3-char prefix for single-segment directory names (e.g., "plan" → "pla" instead of "p")
+
 ## [0.3.0] - 2026-01-18
 
 ### Added
