@@ -99,6 +99,48 @@ Feature: Ticket Listing
     And the output line 2 should contain "ready-002"
     And the output line 3 should contain "ready-003"
 
+  Scenario: Ready with status filter shows only open tickets
+    Given a ticket exists with ID "ready-001" and title "Open ticket"
+    And a ticket exists with ID "ready-002" and title "In progress ticket"
+    And ticket "ready-002" has status "in_progress"
+    When I run "ticket ready --status=open"
+    Then the command should succeed
+    And the output should contain "ready-001"
+    And the output should not contain "ready-002"
+
+  Scenario: Ready with status filter shows only in_progress tickets
+    Given a ticket exists with ID "ready-001" and title "Open ticket"
+    And a ticket exists with ID "ready-002" and title "In progress ticket"
+    And ticket "ready-002" has status "in_progress"
+    When I run "ticket ready --status=in_progress"
+    Then the command should succeed
+    And the output should not contain "ready-001"
+    And the output should contain "ready-002"
+
+  Scenario: Ready with status filter still excludes blocked tickets
+    Given a ticket exists with ID "ready-001" and title "Blocked open ticket"
+    And a ticket exists with ID "ready-002" and title "Unblocked open ticket"
+    And a ticket exists with ID "ready-003" and title "Blocker"
+    And ticket "ready-001" depends on "ready-003"
+    When I run "ticket ready --status=open"
+    Then the command should succeed
+    And the output should contain "ready-002"
+    And the output should not contain "ready-001"
+
+  Scenario: Ready with status and assignee filter combined
+    Given a ticket exists with ID "ready-001" and title "Worker open"
+    And a ticket exists with ID "ready-002" and title "Worker in progress"
+    And a ticket exists with ID "ready-003" and title "QA open"
+    And ticket "ready-001" has assignee "worker"
+    And ticket "ready-002" has assignee "worker"
+    And ticket "ready-003" has assignee "qa"
+    And ticket "ready-002" has status "in_progress"
+    When I run "ticket ready --status=open -a worker"
+    Then the command should succeed
+    And the output should contain "ready-001"
+    And the output should not contain "ready-002"
+    And the output should not contain "ready-003"
+
   Scenario: Blocked shows tickets with unclosed deps
     Given a ticket exists with ID "block-001" and title "Blocked ticket"
     And a ticket exists with ID "block-002" and title "Blocker ticket"

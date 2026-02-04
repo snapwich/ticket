@@ -9,7 +9,7 @@ Tickets are markdown files with YAML frontmatter in `.tickets/`. This allows AI 
 Using ticket IDs as file names also allows IDEs to quickly navigate to the ticket for you. For example, you might run `git log` in your terminal and see something like:
 
 ```
-nw-5c46: add SSE connection management 
+nw-5c46: add SSE connection management
 ```
 
 VS Code allows you to Ctrl+Click or Cmd+Click the ID and jump directly to the file to read the details.
@@ -71,6 +71,8 @@ Commands:
   close <id>               Set status to closed
   reopen <id>              Set status to open
   status <id> <status>     Update status (open|in_progress|closed)
+  assign <id> <assignee>   Set ticket assignee
+  unassign <id>            Clear ticket assignee
   tree [id] [--status=X] [-a X] [-T X]  Show parent-child ticket hierarchy
   dep <id> <dep-id>        Add dependency (id depends on dep-id)
   dep tree [--full] <id>   Show dependency tree (--full disables dedup)
@@ -79,7 +81,7 @@ Commands:
   link <id> <id> [id...]   Link tickets together (symmetric)
   unlink <id> <target-id>  Remove link between tickets
   ls|list [--status=X] [-a X] [-T X]   List tickets
-  ready [-a X] [-T X]      List open/in-progress tickets with deps resolved
+  ready [--status=X] [-a X] [-T X]  List tickets with deps resolved (default: open+in_progress)
   blocked [-a X] [-T X]    List open/in-progress tickets with unresolved deps
   closed [--limit=N] [-a X] [-T X] List recently closed tickets (default 20, by mtime)
   show <id>                Display ticket

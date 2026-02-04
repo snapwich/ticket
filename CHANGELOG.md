@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Added
+
+- `assign <id> <assignee>` command to set ticket assignee
+- `unassign <id>` command to clear ticket assignee
+- `--status=X` filter for `ready` command (e.g., `tk ready --status=open` for unclaimed tickets)
 - `edit --children` flag to open a ticket and all its descendants in `$EDITOR`
 - `tree` command to display parent-child ticket hierarchy with box-drawing characters
   - Supports `--status`, `-a` (assignee), and `-T` (tag) filters

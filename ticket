@@ -286,6 +286,40 @@ cmd_reopen() {
     cmd_status "$1" "open"
 }
 
+cmd_assign() {
+    if [[ $# -lt 2 ]]; then
+        echo "Usage: $(basename "$0") assign <id> <assignee>" >&2
+        return 1
+    fi
+
+    local id="$1"
+    local assignee="$2"
+    local file
+    file=$(ticket_path "$id") || return 1
+
+    update_yaml_field "$file" "assignee" "$assignee"
+    echo "Assigned $(basename "$file" .md) -> $assignee"
+}
+
+cmd_unassign() {
+    if [[ $# -lt 1 ]]; then
+        echo "Usage: $(basename "$0") unassign <id>" >&2
+        return 1
+    fi
+
+    local id="$1"
+    local file
+    file=$(ticket_path "$id") || return 1
+
+    if ! _grep -q "^assignee:" "$file"; then
+        echo "Ticket $(basename "$file" .md) has no assignee"
+        return 0
+    fi
+
+    _sed_i "$file" '/^assignee:/d'
+    echo "Unassigned $(basename "$file" .md)"
+}
+
 cmd_tree() {
     local root_id="" status_filter="" assignee_filter="" tag_filter=""
 
@@ -941,18 +975,19 @@ cmd_ls() {
 }
 
 cmd_ready() {
-    local assignee_filter="" tag_filter=""
+    local assignee_filter="" tag_filter="" status_filter=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -a) assignee_filter="$2"; shift 2 ;;
             --assignee=*) assignee_filter="${1#--assignee=}"; shift ;;
             -T) tag_filter="$2"; shift 2 ;;
             --tag=*) tag_filter="${1#--tag=}"; shift ;;
+            --status=*) status_filter="${1#--status=}"; shift ;;
             *) shift ;;
         esac
     done
 
-    awk -v assignee_filter="$assignee_filter" -v tag_filter="$tag_filter" '
+    awk -v assignee_filter="$assignee_filter" -v tag_filter="$tag_filter" -v status_filter="$status_filter" '
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
         if (prev_file) store()
@@ -990,7 +1025,11 @@ cmd_ready() {
         # Find ready tickets: active with all deps closed
         for (id in statuses) {
             status = statuses[id]
-            if (status != "open" && status != "in_progress") continue
+            if (status_filter != "") {
+                if (status != status_filter) continue
+            } else {
+                if (status != "open" && status != "in_progress") continue
+            }
             if (assignee_filter != "" && assignees[id] != assignee_filter) continue
             if (tag_filter != "" && !has_tag(all_tags[id], tag_filter)) continue
 
@@ -1769,6 +1808,8 @@ Commands:
   close <id>               Set status to closed
   reopen <id>              Set status to open
   status <id> <status>     Update status (open|in_progress|closed)
+  assign <id> <assignee>   Set ticket assignee
+  unassign <id>            Clear ticket assignee
   tree [id] [--status=X] [-a X] [-T X]  Show parent-child ticket hierarchy
   dep <id> <dep-id>        Add dependency (id depends on dep-id)
   dep tree [--full] <id>   Show dependency tree (--full disables dedup)
@@ -1777,7 +1818,7 @@ Commands:
   link <id> <id> [id...]   Link tickets together (symmetric)
   unlink <id> <target-id>  Remove link between tickets
   ls|list [--status=X] [-a X] [-T X]   List tickets
-  ready [-a X] [-T X]      List open/in-progress tickets with deps resolved
+  ready [--status=X] [-a X] [-T X]  List tickets with deps resolved (default: open+in_progress)
   blocked [-a X] [-T X]    List open/in-progress tickets with unresolved deps
   closed [--limit=N] [-a X] [-T X] List recently closed tickets (default 20, by mtime)
   show <id>                Display ticket
@@ -1804,6 +1845,8 @@ case "${1:-help}" in
     close)  shift; cmd_close "$@" ;;
     reopen) shift; cmd_reopen "$@" ;;
     status) shift; cmd_status "$@" ;;
+    assign) shift; cmd_assign "$@" ;;
+    unassign) shift; cmd_unassign "$@" ;;
     tree)   shift; cmd_tree "$@" ;;
     dep)    shift; cmd_dep "$@" ;;
     undep)  shift; cmd_undep "$@" ;;

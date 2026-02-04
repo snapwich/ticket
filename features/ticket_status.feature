@@ -60,3 +60,49 @@ Feature: Ticket Status Management
     When I run "ticket status 0001 in_progress"
     Then the command should succeed
     And ticket "test-0001" should have field "status" with value "in_progress"
+
+  Scenario: Assign command sets assignee
+    When I run "ticket assign test-0001 worker"
+    Then the command should succeed
+    And the output should be "Assigned test-0001 -> worker"
+    And ticket "test-0001" should have field "assignee" with value "worker"
+
+  Scenario: Assign command updates existing assignee
+    Given ticket "test-0001" has assignee "old-worker"
+    When I run "ticket assign test-0001 new-worker"
+    Then the command should succeed
+    And the output should be "Assigned test-0001 -> new-worker"
+    And ticket "test-0001" should have field "assignee" with value "new-worker"
+
+  Scenario: Assign command with partial ID
+    When I run "ticket assign 0001 qa-agent"
+    Then the command should succeed
+    And ticket "test-0001" should have field "assignee" with value "qa-agent"
+
+  Scenario: Assign non-existent ticket fails
+    When I run "ticket assign nonexistent worker"
+    Then the command should fail
+    And the output should contain "Error: ticket 'nonexistent' not found"
+
+  Scenario: Unassign command clears assignee
+    Given ticket "test-0001" has assignee "worker"
+    When I run "ticket unassign test-0001"
+    Then the command should succeed
+    And the output should be "Unassigned test-0001"
+    And ticket "test-0001" should not have field "assignee"
+
+  Scenario: Unassign ticket without assignee succeeds
+    When I run "ticket unassign test-0001"
+    Then the command should succeed
+    And the output should be "Ticket test-0001 has no assignee"
+
+  Scenario: Unassign command with partial ID
+    Given ticket "test-0001" has assignee "worker"
+    When I run "ticket unassign 0001"
+    Then the command should succeed
+    And ticket "test-0001" should not have field "assignee"
+
+  Scenario: Unassign non-existent ticket fails
+    When I run "ticket unassign nonexistent"
+    Then the command should fail
+    And the output should contain "Error: ticket 'nonexistent' not found"

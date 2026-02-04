@@ -511,6 +511,17 @@ def step_ticket_has_field_value(context, ticket_id, field, value):
     assert actual == value, f"Field '{field}' has value '{actual}', expected '{value}'"
 
 
+@then(r'ticket "(?P<ticket_id>[^"]+)" should not have field "(?P<field>[^"]+)"')
+def step_ticket_not_has_field(context, ticket_id, field):
+    """Assert ticket does not have a field."""
+    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    content = ticket_path.read_text()
+
+    pattern = rf'^{re.escape(field)}:\s*'
+    match = re.search(pattern, content, re.MULTILINE)
+    assert not match, f"Field '{field}' should not exist in ticket\nContent: {content}"
+
+
 @then(r'ticket "(?P<ticket_id>[^"]+)" should have "(?P<dep_id>[^"]+)" in deps')
 def step_ticket_has_dep(context, ticket_id, dep_id):
     """Assert ticket has a dependency."""
