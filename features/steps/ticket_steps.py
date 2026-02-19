@@ -650,6 +650,28 @@ def step_jsonl_deps_is_array(context):
     raise AssertionError("No JSONL line with deps field found")
 
 
+@then(r'the plan wave (?P<wave_num>\d+) should contain "(?P<text>[^"]+)"')
+def step_plan_wave_contains(context, wave_num, text):
+    """Assert that a specific wave section contains the given text."""
+    output = context.stdout
+    wave_num = int(wave_num)
+
+    # Split output into wave sections
+    import re as _re
+    sections = _re.split(r'── Wave (\d+) ─+', output)
+    # sections: ['before', '1', 'wave1 content', '2', 'wave2 content', ...]
+    found = False
+    for i in range(1, len(sections) - 1, 2):
+        if int(sections[i]) == wave_num:
+            found = True
+            wave_content = sections[i + 1]
+            # Only check lines that start with a ticket ID (not the blocker annotations of other lines)
+            assert text in wave_content, \
+                f"Wave {wave_num} does not contain '{text}'\nWave content: {wave_content}\nFull output:\n{output}"
+            break
+    assert found, f"Wave {wave_num} not found in output:\n{output}"
+
+
 @then(r'the (?:dep )?tree output should have (?P<first_id>[^\s]+) before (?P<second_id>[^\s]+)')
 def step_tree_output_order(context, first_id, second_id):
     """Assert that first_id appears before second_id in tree output."""

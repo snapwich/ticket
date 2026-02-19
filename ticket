@@ -1219,6 +1219,235 @@ cmd_blocked() {
     ' "$TICKETS_DIR"/*.md 2>/dev/null
 }
 
+cmd_plan() {
+    local assignee_filter="" tag_filter="" status_filter=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -a) assignee_filter="$2"; shift 2 ;;
+            --assignee=*) assignee_filter="${1#--assignee=}"; shift ;;
+            -T) tag_filter="$2"; shift 2 ;;
+            --tag=*) tag_filter="${1#--tag=}"; shift ;;
+            --status=*) status_filter="${1#--status=}"; shift ;;
+            *) shift ;;
+        esac
+    done
+
+    awk -v assignee_filter="$assignee_filter" -v tag_filter="$tag_filter" -v status_filter="$status_filter" '
+    BEGIN { FS=": "; in_front=0 }
+    FNR==1 {
+        if (prev_file) store()
+        id=""; status=""; title=""; deps=""; priority=""; assignee=""; tags=""; itype=""; in_front=0
+        prev_file=FILENAME
+    }
+    /^---$/ { in_front = !in_front; next }
+    in_front && /^id:/ { id = $2 }
+    in_front && /^status:/ { status = $2 }
+    in_front && /^priority:/ { priority = $2 }
+    in_front && /^type:/ { itype = $2 }
+    in_front && /^assignee:/ { assignee = $2 }
+    in_front && /^tags:/ { tags = $2; gsub(/[\[\] ]/, "", tags) }
+    in_front && /^deps:/ {
+        deps = $2
+        gsub(/[\[\] ]/, "", deps)
+    }
+    !in_front && /^# / && title == "" { title = substr($0, 3) }
+    function has_tag(tags_str, tag,    i, n, arr) {
+        n = split(tags_str, arr, ",")
+        for (i = 1; i <= n; i++) if (arr[i] == tag) return 1
+        return 0
+    }
+    function store() {
+        if (id != "") {
+            statuses[id] = status
+            titles[id] = title
+            deps_raw[id] = deps
+            priorities[id] = (priority != "") ? priority : 2
+            types[id] = (itype != "") ? itype : "task"
+            assignees[id] = assignee
+            all_tags[id] = tags
+            ticket_count++
+            ticket_ids[ticket_count] = id
+        }
+    }
+    END {
+        if (prev_file) store()
+
+        # Identify active tickets (matching filters)
+        for (i = 1; i <= ticket_count; i++) {
+            id = ticket_ids[i]
+            s = statuses[id]
+            if (status_filter != "") {
+                if (s != status_filter) continue
+            } else {
+                if (s != "open" && s != "in_progress") continue
+            }
+            if (assignee_filter != "" && assignees[id] != assignee_filter) continue
+            if (tag_filter != "" && !has_tag(all_tags[id], tag_filter)) continue
+            active[id] = 1
+            active_count++
+        }
+
+        if (active_count == 0) exit
+
+        # For each active ticket, count unclosed deps
+        for (id in active) {
+            deps = deps_raw[id]
+            unclosed[id] = 0
+            if (deps != "") {
+                n = split(deps, arr, ",")
+                for (j = 1; j <= n; j++) {
+                    dep = arr[j]
+                    if (dep != "" && statuses[dep] != "closed") {
+                        unclosed[id]++
+                    }
+                }
+            }
+        }
+
+        # Build reverse dep map: for each dep, which active tickets depend on it
+        for (id in active) {
+            deps = deps_raw[id]
+            if (deps != "") {
+                n = split(deps, arr, ",")
+                for (j = 1; j <= n; j++) {
+                    dep = arr[j]
+                    if (dep != "") {
+                        rev_count[dep]++
+                        rev_list[dep, rev_count[dep]] = id
+                    }
+                }
+            }
+        }
+
+        # Wave simulation
+        wave = 0
+        total_placed = 0
+
+        while (1) {
+            wave++
+            wave_count = 0
+
+            # Collect tickets ready in this wave
+            for (id in active) {
+                if ((id in placed)) continue
+                if (unclosed[id] == 0) {
+                    wave_count++
+                    wave_tickets[wave_count] = sprintf("%s|%s|%s|%s|%s", priorities[id], id, statuses[id], types[id], titles[id])
+                }
+            }
+
+            if (wave_count == 0) break
+
+            # Sort wave tickets by priority then id
+            for (i = 1; i <= wave_count; i++) {
+                for (j = i + 1; j <= wave_count; j++) {
+                    split(wave_tickets[i], a, "|")
+                    split(wave_tickets[j], b, "|")
+                    if (a[1] > b[1] || (a[1] == b[1] && a[2] > b[2])) {
+                        tmp = wave_tickets[i]; wave_tickets[i] = wave_tickets[j]; wave_tickets[j] = tmp
+                    }
+                }
+            }
+
+            # Build blocker annotations: deps from the previous wave that unblocked this ticket
+            # Wave 1 shows no blockers; subsequent waves show deps that were in previous waves
+            for (i = 1; i <= wave_count; i++) {
+                split(wave_tickets[i], f, "|")
+                id = f[2]
+                blocker_str[id] = ""
+                if (wave > 1) {
+                    deps = deps_raw[id]
+                    if (deps != "") {
+                        n = split(deps, arr, ",")
+                        bstr = ""
+                        for (j = 1; j <= n; j++) {
+                            dep = arr[j]
+                            if (dep != "" && (dep in placed)) {
+                                bstr = (bstr == "") ? dep : bstr ", " dep
+                            }
+                        }
+                        blocker_str[id] = bstr
+                    }
+                }
+            }
+
+            # Print wave header
+            printf "\n── Wave %d ─────────────────────────────────\n", wave
+
+            # Print wave tickets
+            for (i = 1; i <= wave_count; i++) {
+                split(wave_tickets[i], f, "|")
+                id = f[2]
+                dep_annotation = ""
+                if (blocker_str[id] != "") {
+                    dep_annotation = " <- [" blocker_str[id] "]"
+                }
+                printf "%-8s [P%s][%s][%s] - %s%s\n", f[2], f[1], f[3], f[4], f[5], dep_annotation
+            }
+
+            # Mark as placed and decrement dependents
+            for (i = 1; i <= wave_count; i++) {
+                split(wave_tickets[i], f, "|")
+                id = f[2]
+                placed[id] = wave
+                total_placed++
+
+                # Decrement unclosed count for dependents
+                for (r = 1; r <= rev_count[id]; r++) {
+                    dependent = rev_list[id, r]
+                    if ((dependent in active) && !(dependent in placed)) {
+                        unclosed[dependent]--
+                    }
+                }
+            }
+
+            # Clean up wave_tickets for next iteration
+            delete wave_tickets
+        }
+
+        # Report unreachable tickets (cycles or deps on non-existent/filtered tickets)
+        unreachable_count = 0
+        for (id in active) {
+            if (!(id in placed)) {
+                unreachable_count++
+                # Build list of unclosed blockers
+                deps = deps_raw[id]
+                bstr = ""
+                if (deps != "") {
+                    n = split(deps, arr, ",")
+                    for (j = 1; j <= n; j++) {
+                        dep = arr[j]
+                        if (dep != "" && statuses[dep] != "closed") {
+                            bstr = (bstr == "") ? dep : bstr ", " dep
+                        }
+                    }
+                }
+                unreachable[unreachable_count] = sprintf("%s|%s|%s|%s|%s|%s", priorities[id], id, statuses[id], types[id], titles[id], bstr)
+            }
+        }
+
+        if (unreachable_count > 0) {
+            # Sort unreachable by priority then id
+            for (i = 1; i <= unreachable_count; i++) {
+                for (j = i + 1; j <= unreachable_count; j++) {
+                    split(unreachable[i], a, "|")
+                    split(unreachable[j], b, "|")
+                    if (a[1] > b[1] || (a[1] == b[1] && a[2] > b[2])) {
+                        tmp = unreachable[i]; unreachable[i] = unreachable[j]; unreachable[j] = tmp
+                    }
+                }
+            }
+
+            printf "\nBlocked (cycle or missing dep):\n"
+            for (i = 1; i <= unreachable_count; i++) {
+                split(unreachable[i], f, "|")
+                printf "%-8s [P%s][%s][%s] - %s <- [%s]\n", f[2], f[1], f[3], f[4], f[5], f[6]
+            }
+        }
+    }
+    ' "$TICKETS_DIR"/*.md 2>/dev/null
+}
+
 cmd_undep() {
     if [[ $# -lt 2 ]]; then
         echo "Usage: ticket undep <id> <dependency-id>" >&2
@@ -1824,6 +2053,7 @@ Commands:
   ls|list [--status=X] [-a X] [-T X]   List tickets
   ready [--status=X] [-a X] [-T X]  List tickets with deps resolved (default: open+in_progress)
   blocked [-a X] [-T X]    List open/in-progress tickets with unresolved deps
+  plan [--status=X] [-a X] [-T X]  Show dependency resolution order by wave
   closed [--limit=N] [-a X] [-T X] List recently closed tickets (default 20, by mtime)
   show <id>                Display ticket
   edit <id> [--children]   Open ticket in \$EDITOR (--children includes descendants)
@@ -1859,6 +2089,7 @@ case "${1:-help}" in
     ls|list) shift; cmd_ls "$@" ;;
     ready)  shift; cmd_ready "$@" ;;
     blocked) shift; cmd_blocked "$@" ;;
+    plan)   shift; cmd_plan "$@" ;;
     closed) shift; cmd_closed "$@" ;;
     show)   shift; cmd_show "$@" ;;
     edit)   shift; cmd_edit "$@" ;;

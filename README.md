@@ -83,6 +83,7 @@ Commands:
   ls|list [--status=X] [-a X] [-T X]   List tickets
   ready [--status=X] [-a X] [-T X]  List tickets with deps resolved (default: open+in_progress)
   blocked [-a X] [-T X]    List open/in-progress tickets with unresolved deps
+  plan [--status=X] [-a X] [-T X]  Show dependency resolution order by wave
   closed [--limit=N] [-a X] [-T X] List recently closed tickets (default 20, by mtime)
   show <id>                Display ticket
   edit <id> [--children]   Open ticket in $EDITOR (--children includes descendants)

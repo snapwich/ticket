@@ -4,6 +4,7 @@
 
 ### Added
 
+- `plan` command to show dependency resolution order by wave (simulates repeated `tk ready` calls)
 - `assign <id> <assignee>` command to set ticket assignee
 - `unassign <id>` command to clear ticket assignee
 - `--status=X` filter for `ready` command (e.g., `tk ready --status=open` for unclaimed tickets)
