@@ -354,22 +354,29 @@ cmd_tree() {
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
         if (prev_file) store()
-        id=""; status=""; title=""; parent=""; assignee=""; tags=""; itype=""; in_front=0
+        id=""; status=""; title=""; parent=""; deps=""; priority=""; assignee=""; tags=""; itype=""; in_front=0
         prev_file=FILENAME
     }
     /^---$/ { in_front = !in_front; next }
     in_front && /^id:/ { id = $2 }
     in_front && /^status:/ { status = $2 }
     in_front && /^parent:/ { parent = $2 }
+    in_front && /^priority:/ { priority = $2 }
     in_front && /^assignee:/ { assignee = $2 }
     in_front && /^tags:/ { tags = $2; gsub(/[\[\] ]/, "", tags) }
     in_front && /^type:/ { itype = $2 }
+    in_front && /^deps:/ {
+        deps = $2
+        gsub(/[\[\] ]/, "", deps)
+    }
     !in_front && /^# / && title == "" { title = substr($0, 3) }
     function store() {
         if (id != "") {
             statuses[id] = status
             titles[id] = title
             parent_of[id] = parent
+            deps_raw[id] = deps
+            priorities[id] = (priority != "") ? priority : 2
             assignees[id] = assignee
             all_tags[id] = tags
             types[id] = (itype != "") ? itype : "task"
@@ -386,6 +393,63 @@ cmd_tree() {
 
     END {
         if (prev_file) store()
+
+        # Compute waves via Kahn algorithm (pure topological order)
+        for (i = 1; i <= ticket_count; i++) {
+            id = ticket_ids[i]
+            deps = deps_raw[id]
+            unclosed[id] = 0
+            if (deps != "") {
+                n = split(deps, _arr, ",")
+                for (j = 1; j <= n; j++) {
+                    dep = _arr[j]
+                    if (dep != "" && dep in statuses) {
+                        unclosed[id]++
+                    }
+                }
+            }
+        }
+        for (i = 1; i <= ticket_count; i++) {
+            id = ticket_ids[i]
+            deps = deps_raw[id]
+            if (deps != "") {
+                n = split(deps, _arr, ",")
+                for (j = 1; j <= n; j++) {
+                    dep = _arr[j]
+                    if (dep != "") {
+                        _rc[dep]++
+                        _rl[dep, _rc[dep]] = id
+                    }
+                }
+            }
+        }
+        _wave = 0
+        while (1) {
+            _wave++
+            _wc = 0
+            for (i = 1; i <= ticket_count; i++) {
+                id = ticket_ids[i]
+                if (id in wave_of) continue
+                if (unclosed[id] == 0) {
+                    _wc++
+                    _wb[_wc] = id
+                }
+            }
+            if (_wc == 0) break
+            for (k = 1; k <= _wc; k++) {
+                id = _wb[k]
+                wave_of[id] = _wave
+                for (r = 1; r <= _rc[id]; r++) {
+                    _did = _rl[id, r]
+                    if (!(_did in wave_of)) unclosed[_did]--
+                }
+            }
+            delete _wb
+        }
+        for (i = 1; i <= ticket_count; i++) {
+            id = ticket_ids[i]
+            if (!(id in wave_of)) wave_of[id] = 999999
+        }
 
         # Build children map from parent field
         for (i = 1; i <= ticket_count; i++) {
@@ -507,12 +571,11 @@ cmd_tree() {
             }
         }
 
-        # Sort roots by subtree_depth then ID
+        # Sort roots by wave, subtree_depth, then ID
         for (i = 2; i <= root_count; i++) {
             tmp = roots[i]
             j = i - 1
-            while (j >= 1 && (subtree_depth[roots[j]] > subtree_depth[tmp] || \
-                   (subtree_depth[roots[j]] == subtree_depth[tmp] && roots[j] > tmp))) {
+            while (j >= 1 && (_tree_gt(roots[j], tmp))) {
                 roots[j + 1] = roots[j]
                 j--
             }
@@ -526,6 +589,12 @@ cmd_tree() {
             print id " [" statuses[id] "][" types[id] "] " titles[id]
             build_tree_children(id, "", ":" id ":")
         }
+    }
+
+    function _tree_gt(a, b) {
+        if (wave_of[a] != wave_of[b]) return wave_of[a] > wave_of[b]
+        if (subtree_depth[a] != subtree_depth[b]) return subtree_depth[a] > subtree_depth[b]
+        return a > b
     }
 
     function build_tree_children(id, prefix, path,    i, n, ch, arr, tmp, j) {
@@ -542,12 +611,11 @@ cmd_tree() {
         }
         if (n == 0) return
 
-        # Sort by subtree_depth, then by ticket ID (insertion sort)
+        # Sort by wave, subtree_depth, then by ticket ID (insertion sort)
         for (i = 2; i <= n; i++) {
             tmp = arr[i]
             j = i - 1
-            while (j >= 1 && (subtree_depth[arr[j]] > subtree_depth[tmp] || \
-                   (subtree_depth[arr[j]] == subtree_depth[tmp] && arr[j] > tmp))) {
+            while (j >= 1 && (_tree_gt(arr[j], tmp))) {
                 arr[j + 1] = arr[j]
                 j--
             }
@@ -951,13 +1019,14 @@ cmd_ls() {
     awk -v status_filter="$status_filter" -v assignee_filter="$assignee_filter" -v tag_filter="$tag_filter" '
     BEGIN { FS=": "; in_front=0 }
     FNR==1 {
-        if (prev_file) emit()
-        id=""; status=""; title=""; deps=""; assignee=""; tags=""; itype=""; in_front=0
+        if (prev_file) store()
+        id=""; status=""; title=""; deps=""; priority=""; assignee=""; tags=""; itype=""; in_front=0
         prev_file=FILENAME
     }
     /^---$/ { in_front = !in_front; next }
     in_front && /^id:/ { id = $2 }
     in_front && /^status:/ { status = $2 }
+    in_front && /^priority:/ { priority = $2 }
     in_front && /^assignee:/ { assignee = $2 }
     in_front && /^tags:/ { tags = $2; gsub(/[\[\] ]/, "", tags) }
     in_front && /^type:/ { itype = $2 }
@@ -966,19 +1035,120 @@ cmd_ls() {
         gsub(/[\[\] ]/, "", deps)
     }
     !in_front && /^# / && title == "" { title = substr($0, 3) }
-    END { if (prev_file) emit() }
     function has_tag(tags_str, tag,    i, n, arr) {
         n = split(tags_str, arr, ",")
         for (i = 1; i <= n; i++) if (arr[i] == tag) return 1
         return 0
     }
-    function emit() {
-        if (id != "" && (status_filter == "" || status == status_filter) && (assignee_filter == "" || assignee == assignee_filter) && (tag_filter == "" || has_tag(tags, tag_filter))) {
-            t = (itype != "") ? itype : "task"
-            deps_display = (deps != "") ? "[" deps "]" : "[]"
-            gsub(/,/, ", ", deps_display)
-            dep_str = (deps_display != "[]") ? " <- " deps_display : ""
-            printf "%-8s [%s][%s] - %s%s\n", id, status, t, title, dep_str
+    function store() {
+        if (id != "") {
+            statuses[id] = status
+            titles[id] = title
+            deps_raw[id] = deps
+            priorities[id] = (priority != "") ? priority : 2
+            assignees[id] = assignee
+            all_tags[id] = tags
+            types[id] = (itype != "") ? itype : "task"
+            ticket_count++
+            ticket_ids[ticket_count] = id
+        }
+    }
+    END {
+        if (prev_file) store()
+
+        # Compute waves via Kahn algorithm (pure topological order)
+        # Wave 1 = no deps, wave N = all deps in waves < N, 999999 = unreachable
+        for (i = 1; i <= ticket_count; i++) {
+            id = ticket_ids[i]
+            deps = deps_raw[id]
+            unclosed[id] = 0
+            if (deps != "") {
+                n = split(deps, arr, ",")
+                for (j = 1; j <= n; j++) {
+                    dep = arr[j]
+                    if (dep != "" && dep in statuses) {
+                        unclosed[id]++
+                    }
+                }
+            }
+        }
+
+        # Build reverse dep map
+        for (i = 1; i <= ticket_count; i++) {
+            id = ticket_ids[i]
+            deps = deps_raw[id]
+            if (deps != "") {
+                n = split(deps, arr, ",")
+                for (j = 1; j <= n; j++) {
+                    dep = arr[j]
+                    if (dep != "") {
+                        rev_count[dep]++
+                        rev_list[dep, rev_count[dep]] = id
+                    }
+                }
+            }
+        }
+
+        # Wave simulation
+        wave = 0
+        while (1) {
+            wave++
+            wc = 0
+            for (i = 1; i <= ticket_count; i++) {
+                id = ticket_ids[i]
+                if (id in wave_of) continue
+                if (unclosed[id] == 0) {
+                    wc++
+                    wave_batch[wc] = id
+                }
+            }
+            if (wc == 0) break
+            for (k = 1; k <= wc; k++) {
+                id = wave_batch[k]
+                wave_of[id] = wave
+                for (r = 1; r <= rev_count[id]; r++) {
+                    dep_id = rev_list[id, r]
+                    if (!(dep_id in wave_of)) unclosed[dep_id]--
+                }
+            }
+            delete wave_batch
+        }
+
+        # Unreachable tickets get wave 999999
+        for (i = 1; i <= ticket_count; i++) {
+            id = ticket_ids[i]
+            if (!(id in wave_of)) wave_of[id] = 999999
+        }
+
+        # Collect display-eligible tickets
+        count = 0
+        for (i = 1; i <= ticket_count; i++) {
+            id = ticket_ids[i]
+            if (status_filter != "" && statuses[id] != status_filter) continue
+            if (assignee_filter != "" && assignees[id] != assignee_filter) continue
+            if (tag_filter != "" && !has_tag(all_tags[id], tag_filter)) continue
+            count++
+            sort_key[count] = sprintf("%06d|%s|%s", wave_of[id], priorities[id], id)
+            payload[count] = id
+        }
+
+        # Sort by sort_key (wave, priority, id)
+        for (i = 2; i <= count; i++) {
+            tmp_k = sort_key[i]; tmp_p = payload[i]
+            j = i - 1
+            while (j >= 1 && sort_key[j] > tmp_k) {
+                sort_key[j + 1] = sort_key[j]
+                payload[j + 1] = payload[j]
+                j--
+            }
+            sort_key[j + 1] = tmp_k
+            payload[j + 1] = tmp_p
+        }
+
+        # Output
+        for (i = 1; i <= count; i++) {
+            id = payload[i]
+            printf "%-8s [%s][%s] - %s\n", id, statuses[id], types[id], titles[id]
         }
     }
     ' "$TICKETS_DIR"/*.md 2>/dev/null

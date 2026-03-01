@@ -4,6 +4,8 @@
 
 ### Changed
 
+- `ls` now sorts tickets by dependency wave, then priority, then ID (previously unsorted)
+- `tree` now sorts siblings by dependency wave, then subtree depth, then ID; shows dep annotations (`<- [dep-id]`)
 - `ls`, `tree`, `ready`, `blocked`, and `dep tree` commands now display ticket type in output
 
 ### Added

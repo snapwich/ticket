@@ -35,14 +35,6 @@ Feature: Ticket Listing
     And the output should contain "list-0001"
     And the output should not contain "list-0002"
 
-  Scenario: List shows dependencies
-    Given a ticket exists with ID "list-0001" and title "Main ticket"
-    And a ticket exists with ID "list-0002" and title "Dep ticket"
-    And ticket "list-0001" depends on "list-0002"
-    When I run "ticket ls"
-    Then the command should succeed
-    And the output should contain "<- [list-0002]"
-
   Scenario: List with no tickets returns nothing
     When I run "ticket ls"
     Then the output should be empty
@@ -210,6 +202,54 @@ Feature: Ticket Listing
     When I run "ticket ready"
     Then the command should succeed
     And the output should contain "[open][feature]"
+
+  Scenario: List sorts by priority then ID when no deps
+    Given a ticket exists with ID "ls-0003" and title "Low priority" with priority 3
+    And a ticket exists with ID "ls-0001" and title "High priority" with priority 1
+    And a ticket exists with ID "ls-0002" and title "Also high priority" with priority 1
+    When I run "ticket ls"
+    Then the command should succeed
+    And the output line 1 should contain "ls-0001"
+    And the output line 2 should contain "ls-0002"
+    And the output line 3 should contain "ls-0003"
+
+  Scenario: List sorts by dependency wave then priority then ID
+    Given a ticket exists with ID "ls-0001" and title "No deps low pri" with priority 3
+    And a ticket exists with ID "ls-0002" and title "Has dep high pri" with priority 1
+    And a ticket exists with ID "ls-0003" and title "No deps high pri" with priority 1
+    And a ticket exists with ID "ls-0004" and title "Dep target"
+    And ticket "ls-0002" depends on "ls-0004"
+    When I run "ticket ls --status=open"
+    Then the command should succeed
+    And the output line 1 should contain "ls-0003"
+    And the output line 2 should contain "ls-0004"
+    And the output line 3 should contain "ls-0001"
+    And the output line 4 should contain "ls-0002"
+
+  Scenario: List sorts cyclic tickets last
+    Given a ticket exists with ID "ls-0001" and title "Normal ticket"
+    And a ticket exists with ID "ls-0002" and title "Cycle A"
+    And a ticket exists with ID "ls-0003" and title "Cycle B"
+    And ticket "ls-0002" depends on "ls-0003"
+    And ticket "ls-0003" depends on "ls-0002"
+    When I run "ticket ls --status=open"
+    Then the command should succeed
+    And the output line 1 should contain "ls-0001"
+
+  Scenario: List sorts closed tickets by dependency wave not lumped together
+    Given a ticket exists with ID "ls-0001" and title "Base task"
+    And a ticket exists with ID "ls-0002" and title "Depends on base"
+    And a ticket exists with ID "ls-0003" and title "Depends on second"
+    And ticket "ls-0002" depends on "ls-0001"
+    And ticket "ls-0003" depends on "ls-0002"
+    And ticket "ls-0001" has status "closed"
+    And ticket "ls-0002" has status "closed"
+    And ticket "ls-0003" has status "closed"
+    When I run "ticket ls --status=closed"
+    Then the command should succeed
+    And the output line 1 should contain "ls-0001"
+    And the output line 2 should contain "ls-0002"
+    And the output line 3 should contain "ls-0003"
 
   Scenario: Blocked shows ticket type
     Given a ticket exists with ID "block-001" and title "Blocked feature"

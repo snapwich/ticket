@@ -166,3 +166,35 @@ Feature: Ticket Tree (Parent-Child Hierarchy)
     Then the command should succeed
     And the output should contain "[open][epic]"
     And the output should contain "[open][feature]"
+
+  Scenario: Tree sorts siblings by dependency wave
+    Given a ticket exists with ID "proj-0001" and title "Root"
+    And a ticket exists with ID "proj-0002" and title "Depends on external" with parent "proj-0001"
+    And a ticket exists with ID "proj-0003" and title "No deps sibling" with parent "proj-0001"
+    And a ticket exists with ID "proj-0004" and title "External dep target"
+    And ticket "proj-0002" depends on "proj-0004"
+    When I run "ticket tree proj-0001"
+    Then the command should succeed
+    And the tree output should have proj-0003 before proj-0002
+
+  Scenario: Tree sorts roots by dependency wave
+    Given a ticket exists with ID "proj-0001" and title "Depends on other root"
+    And a ticket exists with ID "proj-0002" and title "Independent root"
+    And a ticket exists with ID "proj-0003" and title "External dep"
+    And ticket "proj-0001" depends on "proj-0003"
+    When I run "ticket tree"
+    Then the command should succeed
+    And the tree output should have proj-0002 before proj-0001
+
+  Scenario: Tree sorts siblings by dependency wave with multiple deps
+    Given a ticket exists with ID "proj-0001" and title "Root"
+    And a ticket exists with ID "proj-0002" and title "Child with two deps" with parent "proj-0001"
+    And a ticket exists with ID "proj-0003" and title "Late dep" with parent "proj-0001"
+    And a ticket exists with ID "proj-0004" and title "Early dep" with parent "proj-0001"
+    And ticket "proj-0003" depends on "proj-0004"
+    And ticket "proj-0002" depends on "proj-0003"
+    And ticket "proj-0002" depends on "proj-0004"
+    When I run "ticket tree proj-0001"
+    Then the command should succeed
+    And the tree output should have proj-0004 before proj-0003
+    And the tree output should have proj-0003 before proj-0002
