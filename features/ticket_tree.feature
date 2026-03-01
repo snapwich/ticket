@@ -33,14 +33,14 @@ Feature: Ticket Tree (Parent-Child Hierarchy)
     Then the command should succeed
     And the output should match box-drawing tree format
 
-  Scenario: Tree shows status and title
+  Scenario: Tree shows status, type, and title
     Given a ticket exists with ID "proj-0001" and title "Epic Auth"
     And a ticket exists with ID "proj-0002" and title "Login page" with parent "proj-0001"
     And ticket "proj-0002" has status "in_progress"
     When I run "ticket tree"
     Then the command should succeed
-    And the output should contain "[open]"
-    And the output should contain "[in_progress]"
+    And the output should contain "[open][task]"
+    And the output should contain "[in_progress][task]"
     And the output should contain "Epic Auth"
     And the output should contain "Login page"
 
@@ -156,3 +156,13 @@ Feature: Ticket Tree (Parent-Child Hierarchy)
     And the tree output should have proj-0001 before proj-0002
     And the tree output should have proj-0002 before proj-0003
     And the tree output should have proj-0003 before proj-0004
+
+  Scenario: Tree shows ticket type
+    Given a ticket exists with ID "proj-0001" and title "Epic Auth"
+    And a ticket exists with ID "proj-0002" and title "Login page" with parent "proj-0001"
+    And ticket "proj-0001" has type "epic"
+    And ticket "proj-0002" has type "feature"
+    When I run "ticket tree"
+    Then the command should succeed
+    And the output should contain "[open][epic]"
+    And the output should contain "[open][feature]"

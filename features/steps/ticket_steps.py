@@ -178,6 +178,15 @@ def step_ticket_has_assignee(context, ticket_id, assignee):
     ticket_path.write_text(content)
 
 
+@given(r'ticket "(?P<ticket_id>[^"]+)" has type "(?P<ticket_type>[^"]+)"')
+def step_ticket_has_type(context, ticket_id, ticket_type):
+    """Set ticket type."""
+    ticket_path = Path(context.test_dir) / '.tickets' / f'{ticket_id}.md'
+    content = ticket_path.read_text()
+    content = re.sub(r'^type: \w+', f'type: {ticket_type}', content, flags=re.MULTILINE)
+    ticket_path.write_text(content)
+
+
 @given(r'ticket "(?P<ticket_id>[^"]+)" has tags "(?P<tags>[^"]+)"')
 def step_ticket_has_tags(context, ticket_id, tags):
     """Set ticket tags."""

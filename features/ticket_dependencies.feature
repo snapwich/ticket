@@ -52,11 +52,11 @@ Feature: Ticket Dependencies
     And the output should contain "task-0002"
     And the output should contain "task-0003"
 
-  Scenario: Dependency tree shows status and title
+  Scenario: Dependency tree shows status, type, and title
     Given ticket "task-0001" depends on "task-0002"
     When I run "ticket dep tree task-0001"
     Then the command should succeed
-    And the output should contain "[open]"
+    And the output should contain "[open][task]"
     And the output should contain "Main task"
     And the output should contain "Dependency task"
 
@@ -143,3 +143,12 @@ Feature: Ticket Dependencies
     And the dep tree output should have task-0010 before task-0015
     And the dep tree output should have task-0010 before task-0020
     And the dep tree output should have task-0015 before task-0020
+
+  Scenario: Dependency tree shows ticket type
+    Given ticket "task-0001" depends on "task-0002"
+    And ticket "task-0001" has type "feature"
+    And ticket "task-0002" has type "bug"
+    When I run "ticket dep tree task-0001"
+    Then the command should succeed
+    And the output should contain "[open][feature]"
+    And the output should contain "[open][bug]"

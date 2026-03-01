@@ -24,7 +24,7 @@ Feature: Ticket Listing
     Given a ticket exists with ID "list-0001" and title "My ticket"
     When I run "ticket ls"
     Then the command should succeed
-    And the output should match pattern "list-0001\s+\[open\]\s+-\s+My ticket"
+    And the output should match pattern "list-0001\s+\[open\]\[task\]\s+-\s+My ticket"
 
   Scenario: List with status filter
     Given a ticket exists with ID "list-0001" and title "Open ticket"
@@ -87,7 +87,7 @@ Feature: Ticket Listing
     Given a ticket exists with ID "ready-001" and title "Priority ticket"
     When I run "ticket ready"
     Then the command should succeed
-    And the output should match pattern "ready-001\s+\[P2\]\[open\]\s+-\s+Priority ticket"
+    And the output should match pattern "ready-001\s+\[P2\]\[open\]\[task\]\s+-\s+Priority ticket"
 
   Scenario: Ready sorts by priority then ID
     Given a ticket exists with ID "ready-003" and title "Low priority" with priority 3
@@ -203,3 +203,19 @@ Feature: Ticket Listing
     When I run "ticket closed"
     Then the command should succeed
     And the output should not contain "done-0001"
+
+  Scenario: Ready shows ticket type
+    Given a ticket exists with ID "ready-001" and title "Feature ticket"
+    And ticket "ready-001" has type "feature"
+    When I run "ticket ready"
+    Then the command should succeed
+    And the output should contain "[open][feature]"
+
+  Scenario: Blocked shows ticket type
+    Given a ticket exists with ID "block-001" and title "Blocked feature"
+    And a ticket exists with ID "block-002" and title "Blocker bug"
+    And ticket "block-001" depends on "block-002"
+    And ticket "block-001" has type "feature"
+    When I run "ticket blocked"
+    Then the command should succeed
+    And the output should contain "[open][feature]"
